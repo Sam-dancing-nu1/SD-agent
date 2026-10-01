@@ -1,0 +1,22 @@
+# 临时与备份
+*.bak
+*.bak_*
+*.tmp
+*.swp
+*~
+scratch/
+archive/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# 凭据红线：任何密钥文件禁止入库
+*.pem
+*.key
+*.env
+.env*
+secrets.*
