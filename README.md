@@ -42,5 +42,17 @@
 
 ---
 
-自研设计，非任何现有框架的衍生。© 2024-2026 Sam-Dancing™
-本文档含 AI 协作生成内容。
+## 开源许可 / License
+
+本项目采用 **GNU AGPL v3.0** 许可证（GitHub 官方标准文本，见 [LICENSE](LICENSE)）。
+This project is licensed under the **GNU AGPL v3.0** (standard text as provided by GitHub, see [LICENSE](LICENSE)).
+
+- 学习、自用、非商业用途：自由使用、修改、研究，无附加义务。
+  Free to use, modify and study for learning, personal and non-commercial purposes.
+- 二次开发：修改后分发或对外提供网络服务，必须以 AGPL-3.0 开源你的衍生作品，并注明原作者 Sam-Dancing。
+  Derivative works distributed or offered over a network must be open-sourced under AGPL-3.0 and credit the original author Sam-Dancing.
+- 商业使用：如需闭源商用或商业授权（双许可模式），请联系作者。
+  For closed-source commercial use or commercial licensing (dual licensing), contact the author.
+
+Copyright (C) 2024-2026 Sam-Dancing. 自研设计，非任何现有框架的衍生。
+本文档含 AI 协作生成内容 / This document contains AI-generated content.
