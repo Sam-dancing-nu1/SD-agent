@@ -56,7 +56,7 @@
     </div>
   </div>
 
-  <div class="arrow">▲</div>
+  <div class="arrow">推导 ↓</div>
 
   <div class="layer">
     <h2>观察面（双终端） <span>— 工作面 / 观察面物理分离，统一读网关</span></h2>
@@ -82,7 +82,7 @@
     <div class="flow">
       <div class="node hl"><b>本地感知探针</b>（常驻 · 近零成本）<br><span style="color:#8b949e">输出标签 + 校准置信度，不出裁决</span></div>
       <div class="arr">—标签+置信度→</div>
-      <div class="node hl"><b>查表引擎 / 配置档案</b>（专武 Profile）<br><span style="color:#8b949e">纯代码裁决：放行 / 标记 / 阻断</span></div>
+      <div class="node hl"><b>查表引擎 / 配置档案与认知纪律域</b>（专武 Profile）<br><span style="color:#8b949e">纯代码裁决：放行 / 标记 / 阻断；域 = 提示模板+白名单+阈值真实切换</span></div>
       <div class="arr">—低置信→</div>
       <div class="node"><b>升级人工</b><br><span style="color:#8b949e">阈值按后果分级；不可逆操作闸门=纯代码</span></div>
     </div>
@@ -91,7 +91,14 @@
       <div class="box"><div class="t">作用点 ②进度阻塞检测</div><div class="d">死循环 / 伪进展 / 振荡判定 → 最小化干预三级</div></div>
       <div class="box"><div class="t">作用点 ③风险拦截提精度</div><div class="d">压漏拦截与误拦截两头</div></div>
     </div>
-    <div class="note">认知状态机（SOP 引擎）：调研 → 计划 → 执行 → 验证 → 沉淀 强制流转 · 流转守卫 · 主张-证据强制绑定 · 有界验收 · 收敛/发散/振荡三态 · 干预三级（最小注入 / 策略切换 / 挂起等人）</div>
+  </div>
+
+  <div class="arrow">▲</div>
+
+  <div class="layer">
+    <h2>认知状态机（SOP 引擎 / 认知虚拟机） <span>— 组件 3 · 强制流转与验证闭环</span></h2>
+    <div class="pill">调研 → 计划 → 执行 → 验证 → 沉淀</div><div class="pill">流转守卫</div><div class="pill">主张-证据强制绑定</div><div class="pill">有界验收</div><div class="pill">收敛/发散/振荡三态</div><div class="pill">干预三级（最小注入 / 策略切换 / 挂起等人）</div>
+    <div class="note">强制有限状态流转：未调研禁止写入、未验证禁止宣告完成；完成判定只认代码验证器产出的证据。</div>
   </div>
 
   <div class="arrow">▲</div>
@@ -127,6 +134,7 @@
       <div class="box"><div class="t">生命周期钩子</div><div class="d">五阶段钩子 · 单一调度入口 · 同步只在决策链 / 观察者异步扇出</div></div>
       <div class="box"><div class="t">工作区与隔离</div><div class="d">证据载体 / 物理隔离 / 回滚锚 / 痕迹格式；运行期资源由环境档案显式分配</div></div>
       <div class="box"><div class="t">自我进化</div><div class="d">进化对象是 Harness、模型权重冻结；批评家必须是代码；提议→评估→人工确认→落盘→显式生效</div></div>
+      <div class="box"><div class="t">能力供给与扩展（插件面）</div><div class="d">技能包 / 工具与上下文接入协议 / 外部事件回调 / 定时调度 / 隔离执行环境五类入口；低耦合可插拔，进出只经网关 / 标签 / 白名单 / 检查点四处</div></div>
     </div>
   </div>
 
