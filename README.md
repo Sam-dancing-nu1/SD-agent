@@ -22,6 +22,7 @@
 | [docs/concept-v2.md](docs/concept-v2.md) | 底层概念体系：四条公理、五层工程地基、十二类架构组件（含认知纪律域、缓存与上下文工程、生命周期钩子）、靶子清单、硬约束、待磨合点 | 可外发（无工具指向性） |
 | [docs/evidence.md](docs/evidence.md) | 实证对账：概念与真实运行证据的逐条对照（已脱敏） | 公开 |
 | [docs/iterations.md](docs/iterations.md) | 迭代记录：每轮文档迭代的变更摘要、待核验判断点与素材映射（滚动更新，只留这一份） | 公开 |
+| [docs/architecture.html](docs/architecture.html) | 架构总览图：分层可视化（浏览器打开，单文件无外部依赖） | 公开 |
 | [AGENTS.md](AGENTS.md) | 协作纪律：任何 AI Agent 进场前必读 | 可外发 |
 
 仓库结构约定：根目录只放入口与法务文本（README / LICENSE / AGENTS.md / .gitignore）；工程文档进 docs/；原始素材（对话导出等含交互记录的材料）本地保存于 docs/materials/ 但**不入库**（已 gitignore）；代码（src/）与测试（tests/）开工时再建。文档组织按工程文档类型划分，不采用个人笔记库的 PARA 分类法。

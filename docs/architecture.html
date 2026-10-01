@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>SD-agent 架构总览</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0f1216; color:#c9d1d9; font-family:'JetBrains Mono',Consolas,'Courier New',monospace; padding:36px 16px 60px; line-height:1.55; }
+  .wrap { max-width:1080px; margin:0 auto; }
+  h1 { font-size:22px; letter-spacing:1px; color:#e6edf3; }
+  .sub { color:#8b949e; font-size:12.5px; margin:6px 0 22px; }
+  .motto { border-left:3px solid #d8a25a; background:#161b22; padding:10px 14px; margin:14px 0 24px; font-size:13px; }
+  .motto b { color:#d8a25a; }
+  .layer { background:#161b22; border:1px solid #2d333b; border-radius:8px; padding:14px 18px; margin:0 0 4px; }
+  .layer h2 { font-size:13px; color:#d8a25a; letter-spacing:2px; margin-bottom:8px; }
+  .layer h2 span { color:#8b949e; letter-spacing:0; font-weight:normal; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .box { flex:1; min-width:210px; background:#0f1216; border:1px solid #2d333b; border-radius:6px; padding:10px 12px; font-size:12px; }
+  .box .t { color:#e6edf3; font-size:12.5px; margin-bottom:4px; }
+  .box .d { color:#8b949e; }
+  .tag { display:inline-block; font-size:10px; color:#d8a25a; border:1px solid #d8a25a44; border-radius:3px; padding:0 6px; margin-right:6px; }
+  .arrow { text-align:center; color:#d8a25a; font-size:15px; margin:2px 0; letter-spacing:6px; }
+  .flow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px; margin-top:6px; }
+  .node { background:#0f1216; border:1px solid #2d333b; border-radius:6px; padding:8px 12px; }
+  .node.hl { border-color:#d8a25a88; }
+  .arr { color:#d8a25a; }
+  .pill { display:inline-block; background:#21262d; border-radius:10px; padding:1px 10px; margin:2px 4px 2px 0; font-size:11px; color:#c9d1d9; }
+  .warn { color:#e3b341; }
+  .note { color:#8b949e; font-size:11.5px; margin-top:8px; }
+  .axiom { display:flex; gap:10px; flex-wrap:wrap; }
+  .ax { flex:1; min-width:230px; background:#0f1216; border:1px solid #2d333b; border-radius:6px; padding:8px 12px; font-size:11.5px; color:#8b949e; }
+  .ax b { color:#c9d1d9; display:block; margin-bottom:2px; }
+  .foot { display:flex; gap:12px; margin-top:8px; }
+  .foot .box { text-align:center; }
+  .num { color:#d8a25a; font-size:18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>SD-agent · 自研 Agent 运行时底座（Harness）</h1>
+  <div class="sub">架构总览 · 概念体系 v3 · 概念设计期（无实现代码）</div>
+
+  <div class="motto">
+    <b>核心命题（作者原话）</b>：拔高能力上限是假的，只是尽可能地守住模型的底线，不要让它浪费时间、人力、物力、金钱、token。<br>
+    <span style="color:#8b949e">能力上限 ≠ 运行行为：同一套权重在真实工程会话里会趋同退化（投降 / 过度服从 / 局部压全局 / 早期结论支配 / 伪进展），由底座运行时兜住。</span>
+  </div>
+
+  <div class="layer">
+    <h2>四条公理 <span>— 一切设计从这推出来</span></h2>
+    <div class="axiom">
+      <div class="ax"><b>1 下限公理</b>模型高智力低纪律，纪律靠工程不靠自觉。⚠ 边界：纪律是兜底不是枷锁——过度限制会降智，须找<b style="display:inline;color:#e3b341">限制与自主的平衡点</b>。</div>
+      <div class="ax"><b>2 纪律外置公理</b>规则的制定权与裁决权归配置和代码，不与模型博弈；单向注入干预是允许手段；接管裁决权、不接管推理权。</div>
+      <div class="ax"><b>3 腐蚀公理</b>自动化更新会腐蚀人工治理成果：人工标记不可覆盖、更新只许追加、变更可回滚、自愈限次熔断。</div>
+      <div class="ax"><b>4 上下文不可靠公理</b>上下文随时被压缩污染截断：唯一副本绝不放上下文里，关键状态外置，产物落盘可复查。</div>
+    </div>
+  </div>
+
+  <div class="arrow">▲</div>
+
+  <div class="layer">
+    <h2>观察面（双终端） <span>— 工作面 / 观察面物理分离，统一读网关</span></h2>
+    <div class="row">
+      <div class="box"><div class="t">工作终端</div><div class="d">干活用；注入内容与动作全程可追溯</div></div>
+      <div class="box"><div class="t">监控终端</div><div class="d">用量 / 缓存命中 / 状态机进度 / 当前域 / 拦截与干预记录 / 事件流</div></div>
+      <div class="box"><div class="t">结构化引导</div><div class="d">边界条例用表单配置，不靠自然语言博弈；远程只做查看/审批/下发</div></div>
+    </div>
+  </div>
+
+  <div class="arrow">▲</div>
+
+  <div class="layer">
+    <h2>事件总线 · 网关 = 唯一事实源与唯一入口</h2>
+    <div class="pill">规范化事件封装</div><div class="pill">多订阅者扇出</div><div class="pill">一票否决合并</div><div class="pill">分级处置</div><div class="pill">出站脱敏</div><div class="pill">断点恢复</div><div class="pill">钩子治理（防供应链劫持）</div>
+    <div class="note">状态变更、工具调用、拦截动作一律过总线；监控 / 审计 / 决策组件 / 记忆系统统一从网关取数。</div>
+  </div>
+
+  <div class="arrow">▲</div>
+
+  <div class="layer">
+    <h2>决策带 <span>— 决策链零大模型：贴标签 → 查表 → 裁决</span></h2>
+    <div class="flow">
+      <div class="node hl"><b>本地感知探针</b>（常驻 · 近零成本）<br><span style="color:#8b949e">输出标签 + 校准置信度，不出裁决</span></div>
+      <div class="arr">—标签+置信度→</div>
+      <div class="node hl"><b>查表引擎 / 配置档案</b>（专武 Profile）<br><span style="color:#8b949e">纯代码裁决：放行 / 标记 / 阻断</span></div>
+      <div class="arr">—低置信→</div>
+      <div class="node"><b>升级人工</b><br><span style="color:#8b949e">阈值按后果分级；不可逆操作闸门=纯代码</span></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="box"><div class="t">作用点 ①思考强度切换</div><div class="d">档位+领域标签，路由到对应档位模型端点</div></div>
+      <div class="box"><div class="t">作用点 ②进度阻塞检测</div><div class="d">死循环 / 伪进展 / 振荡判定 → 最小化干预三级</div></div>
+      <div class="box"><div class="t">作用点 ③风险拦截提精度</div><div class="d">压漏拦截与误拦截两头</div></div>
+    </div>
+    <div class="note">认知状态机（SOP 引擎）：调研 → 计划 → 执行 → 验证 → 沉淀 强制流转 · 流转守卫 · 主张-证据强制绑定 · 有界验收 · 收敛/发散/振荡三态 · 干预三级（最小注入 / 策略切换 / 挂起等人）</div>
+  </div>
+
+  <div class="arrow">▲</div>
+
+  <div class="layer">
+    <h2>执行带 <span>— 模型出智力，底座出 SOP；项目经理不替外包写代码</span></h2>
+    <div class="row">
+      <div class="box"><div class="t">主执行体（常驻）</div><div class="d">承载缓存前缀 / 目标锚 / 痕迹工作区，是连续性的载体</div></div>
+      <div class="box"><div class="t">辅助执行体（星座）</div><div class="d">按需派生 · 用完即弃 · 只回压缩摘要；不共享上下文者不得接需共享决策状态的活</div></div>
+      <div class="box"><div class="t">大模型 Worker</div><div class="d">推理 / 规划 / 工具使用自主权保留（不剥夺决策能力，只不担不可撤销后果的最终裁决）</div></div>
+    </div>
+    <div class="note">归属判据：本轮必须看见的 → 底座上下文；噪声大只要结论的 → 辅助执行体；跨会话才用的 → 记忆按需读。</div>
+  </div>
+
+  <div class="arrow">▲</div>
+
+  <div class="layer">
+    <h2>记忆系统 <span>— 五层含共享层：两个独立组件 · 一样重要 · 相互耦合</span></h2>
+    <div class="row">
+      <div class="box"><div class="t">私有记忆 L0–L3</div><div class="d">L0 工作（目标锚） · L1 情景 · L2 语义（证据+置信度+作用域） · L3 反思</div></div>
+      <div class="box" style="max-width:150px; text-align:center; display:flex; flex-direction:column; justify-content:center"><div class="t">↕ 耦合</div><div class="d">只经结构化痕迹<br>不传原始对话</div></div>
+      <div class="box"><div class="t">共享记忆 L4</div><div class="d">跨执行体全局共享；写入/读取结构化痕迹（来源/置信度/作用域/证据），自带衰减；完成判定 = 被下游读到并采纳</div></div>
+    </div>
+    <div class="note">流水线：零散事实 → 整合（去重去矛盾）→ 观察 → 沉淀可复用知识（技能 / 知识页）；轻重分治：轻索引每轮注入、深记忆按需检索；记忆是税不是红利——写入有证据、召回有预算、过期必衰减。</div>
+  </div>
+
+  <div class="arrow">▲</div>
+
+  <div class="layer">
+    <h2>横切机制 <span>— 贯穿全生命周期</span></h2>
+    <div class="row">
+      <div class="box"><div class="t">上下文与成本工程</div><div class="d">前缀冻结四段结构；切域追加新快照、旧的退役不重写（不毁缓存）；纪律与能力分离；压缩禁区（不改标识符）</div></div>
+      <div class="box"><div class="t">生命周期钩子</div><div class="d">五阶段钩子 · 单一调度入口 · 同步只在决策链 / 观察者异步扇出</div></div>
+      <div class="box"><div class="t">工作区与隔离</div><div class="d">证据载体 / 物理隔离 / 回滚锚 / 痕迹格式；运行期资源由环境档案显式分配</div></div>
+      <div class="box"><div class="t">自我进化</div><div class="d">进化对象是 Harness、模型权重冻结；批评家必须是代码；提议→评估→人工确认→落盘→显式生效</div></div>
+    </div>
+  </div>
+
+  <div class="arrow">▲</div>
+
+  <div class="layer">
+    <h2>五层工程地基 <span>— 缺一层就出能力空洞，由下往上支撑</span></h2>
+    <div class="pill">① 提示词工程</div><div class="pill">② 上下文工程</div><div class="pill">③ Harness 工程</div><div class="pill">④ 循环工程</div><div class="pill">⑤ 图工程（编排）</div>
+    <div class="foot">
+      <div class="box"><div class="num">4</div><div class="d">公理</div></div>
+      <div class="box"><div class="num">12</div><div class="d">架构组件</div></div>
+      <div class="box"><div class="num">20</div><div class="d">硬约束</div></div>
+      <div class="box"><div class="num">21</div><div class="d">靶子（模型短板）</div></div>
+      <div class="box"><div class="num">0</div><div class="d">重型第三方框架</div></div>
+    </div>
+    <div class="note">目标函数：不浪费时间 / 人力 / 物力 / 金钱 / token。域与执行体正交（换纪律 vs 换脑子），记忆管跨时间——三件互不替代。</div>
+  </div>
+
+</div>
+</body>
+</html>
