@@ -20,11 +20,10 @@
 | 文档 | 内容 | 可见性 |
 |---|---|---|
 | [docs/concept-v2.md](docs/concept-v2.md) | 底层概念体系：四条公理、六件套架构、12 条硬约束、待磨合点 | 可外发（无工具指向性） |
-| [docs/evidence.md](docs/evidence.md) | 实证对账：概念与真实运行证据的逐条对照 | 内部参考，勿外发 |
+| [docs/evidence.md](docs/evidence.md) | 实证对账：概念与真实运行证据的逐条对照（已脱敏） | 公开 |
 | [AGENTS.md](AGENTS.md) | 协作纪律：任何 AI Agent 进场前必读 | 可外发 |
-| [docs/materials/](docs/materials/) | 原始素材：QWEN_WEB 原始开局对话（概念蓝图起点）等调研原料 | 内部素材 |
 
-仓库结构约定：根目录只放入口与法务文本（README / LICENSE / AGENTS.md / .gitignore）；工程文档进 docs/；原始素材进 docs/materials/；代码（src/）与测试（tests/）开工时再建。文档组织按工程文档类型划分，不采用个人笔记库的 PARA 分类法。
+仓库结构约定：根目录只放入口与法务文本（README / LICENSE / AGENTS.md / .gitignore）；工程文档进 docs/；原始素材（对话导出等含交互记录的材料）本地保存于 docs/materials/ 但**不入库**（已 gitignore）；代码（src/）与测试（tests/）开工时再建。文档组织按工程文档类型划分，不采用个人笔记库的 PARA 分类法。
 
 ## 四条公理（速览）
 

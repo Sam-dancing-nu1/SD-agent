@@ -20,3 +20,6 @@ desktop.ini
 *.env
 .env*
 secrets.*
+
+# 含交互记录的素材不入库（本地保留）
+docs/materials/
