@@ -22,6 +22,9 @@
 | [docs/concept-v2.md](docs/concept-v2.md) | 底层概念体系（内容为 v3，文件名为历史沿革）：四条公理、五层工程地基、十二类架构组件（含认知纪律域、缓存与上下文工程、生命周期钩子）、靶子清单、硬约束、待磨合点 | 可外发（无工具指向性） |
 | [docs/evidence.md](docs/evidence.md) | 实证对账：概念与真实运行证据的逐条对照（已脱敏） | 公开 |
 | [docs/iterations.md](docs/iterations.md) | 迭代记录：每轮文档迭代的变更摘要、待核验判断点与素材映射（滚动更新，只留这一份） | 公开 |
+| [docs/survey-agent-projects.md](docs/survey-agent-projects.md) | 调研：其他开发者与大厂如何研发 agent、开源项目如何从零起步（调研类参考资料，含第三方项目名，非设计依据） | 公开 |
+| [docs/survey-tui-desktop-stack.md](docs/survey-tui-desktop-stack.md) | 选型调研：核心语言 + TUI + 桌面端（三平台）技术栈，结论标待拍板 | 公开 |
+| [docs/survey-memory-stack.md](docs/survey-memory-stack.md) | 选型调研：记忆系统技术栈（存储/嵌入/检索/五层落点），结论标待拍板 | 公开 |
 | [docs/architecture.html](docs/architecture.html) | 架构总览图：分层可视化（浏览器打开，单文件无外部依赖） | 公开 |
 | [AGENTS.md](AGENTS.md) | 协作纪律：任何 AI Agent 进场前必读 | 可外发 |
 
