@@ -13,7 +13,7 @@
 面向重度工程开发者的自研 Agent 运行时底座（Harness）：纯自研、零重型第三方框架、零现金成本约束。
 不提高模型智力上限，只守住模型能力下限——用工程纪律和验证闭环，兜住模型的幻觉、遗忘、散漫与失控。
 
-当前阶段：概念设计期（只产出理论规划，不写实现代码）。
+当前阶段：P0 最小闭环开工前（文件结构地基已确认，实现代码暂未动工）。
 
 ## 文档导航
 
@@ -26,10 +26,11 @@
 | [docs/survey-tui-desktop-stack.md](docs/survey-tui-desktop-stack.md) | 选型调研：核心语言 + TUI + 桌面端（三平台）技术栈，结论标待拍板 | 公开 |
 | [docs/survey-memory-stack.md](docs/survey-memory-stack.md) | 选型调研：记忆系统技术栈（存储/嵌入/检索/五层落点），结论标待拍板 | 公开 |
 | [docs/decisions.md](docs/decisions.md) | 技术栈决策台账（ADR）：拍板结论、依据、附加条件与依赖顺序 | 公开 |
+| [docs/project-structure.md](docs/project-structure.md) | 项目文件结构规划：P0 文件布局、布局决策、分期扩展位、双壳拆分预案、独立审查对账 | 公开（含来源引用，非纯净） |
 | [docs/architecture.html](docs/architecture.html) | 架构总览图：分层可视化（浏览器打开，单文件无外部依赖） | 公开 |
 | [AGENTS.md](AGENTS.md) | 协作纪律：任何 AI Agent 进场前必读 | 可外发 |
 
-仓库结构约定：根目录只放入口与法务文本（README / LICENSE / AGENTS.md / .gitignore）；工程文档进 docs/；原始素材（对话导出等含交互记录的材料）本地保存于 docs/materials/ 但**不入库**（已 gitignore，现行版本不含）；代码（src/）与测试（tests/）开工时再建。文档组织按工程文档类型划分，不采用个人笔记库的 PARA 分类法。注：仓库历史的早期版本曾包含素材文件，按"不改写历史"纪律保留于历史；现行版本与后续提交一律不含。
+仓库结构约定：根目录只放入口与法务文本（README / LICENSE / AGENTS.md / .gitignore）；工程文档进 docs/；原始素材（对话导出等含交互记录的材料）本地保存于 docs/materials/ 但**不入库**（已 gitignore，现行版本不含）；代码布局按 docs/project-structure.md（src/ 骨架已建、实现未动工，tests/ 自 P1 起建）。文档组织按工程文档类型划分，不采用个人笔记库的 PARA 分类法。注：仓库历史的早期版本曾包含素材文件，按"不改写历史"纪律保留于历史；现行版本与后续提交一律不含。
 
 ## 四条公理（速览）
 
