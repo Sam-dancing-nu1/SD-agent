@@ -25,6 +25,7 @@
 | [docs/survey-agent-projects.md](docs/survey-agent-projects.md) | 调研：其他开发者与大厂如何研发 agent、开源项目如何从零起步（调研类参考资料，含第三方项目名，非设计依据） | 公开 |
 | [docs/survey-tui-desktop-stack.md](docs/survey-tui-desktop-stack.md) | 选型调研：核心语言 + TUI + 桌面端（三平台）技术栈，结论标待拍板 | 公开 |
 | [docs/survey-memory-stack.md](docs/survey-memory-stack.md) | 选型调研：记忆系统技术栈（存储/嵌入/检索/五层落点），结论标待拍板 | 公开 |
+| [docs/decisions.md](docs/decisions.md) | 技术栈决策台账（ADR）：拍板结论、依据、附加条件与依赖顺序 | 公开 |
 | [docs/architecture.html](docs/architecture.html) | 架构总览图：分层可视化（浏览器打开，单文件无外部依赖） | 公开 |
 | [AGENTS.md](AGENTS.md) | 协作纪律：任何 AI Agent 进场前必读 | 可外发 |
 

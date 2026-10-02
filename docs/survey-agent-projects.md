@@ -20,7 +20,7 @@
 - 2026-01-30 引入 skills 工具；2026-02-02 cron 定时任务；2026-02-03 消息网关（telegram）与网关安全配置；2026-02-18 Skills Hub（在线技能搜索/安装）。
 - 2026-02-19 持久记忆系统 + SQLite 会话存储；2026-02-20 子代理委派（subagent delegation）落地。
 - 项目名 Hermes 在提交记录中最早于 2026-02 出现（分支 atropos-hermes-agent、"Hermes agent" 提交）。
-- 提交量（按作者日期统计，仅供参考）：2025 全年约 70 次；2026-02 为 480 次，2026-03 为 2522 次，2026-09 达 18875 次。
+- 提交量（按作者日期统计，仅供参考）：2025 全年 60 次（2025-07~11 逐月 9/10/7/11/23，2025-12 为 0）；2026-02 为 480 次，2026-03 为 2522 次，2026-09 达 18875 次。（主代理实测 git log 逐月计数复核）
 - 演进顺序可概括为：单脚本工具循环 → 加工具 → 抽象 toolset/架构文档 → skills/记忆/网关/子代理/多后端。
 
 ### 技术栈
@@ -32,7 +32,7 @@
 - PR 驱动：首个 PR #1 于 2025-07-26 合并（"Merge pull request #1"），此后持续 PR 合并。（来源：本地 git log）
 - 规划留痕：TODO.md 反复修订（如 2026-02-01"引入子代理架构与交互式澄清问题工具"、2026-02-17 重写子代理/任务管理方向）。（来源：本地 git log）
 - 贡献优先级成文：bug 修复 > 跨平台兼容 > 安全加固（shell 注入/提示注入/路径穿越）> 性能健壮性 > 新技能 > 新工具（"新工具极少需要，多数能力应做成 skill"）> 文档。（来源：本地仓库 CONTRIBUTING.md）
-- 文档先行：developer-guide 有 60+ 篇内部文档（agent-loop、context-compression、gateway-internals、session-storage 等）。（来源：本地 website/docs/developer-guide/）
+- 文档先行：developer-guide 有 57 个文件（56 篇 .md + 1 个目录配置，主代理实测 find 递归计数；agent-loop、context-compression、gateway-internals、session-storage 等）。（来源：本地 website/docs/developer-guide/）
 
 ### 对自研底座的可借鉴点
 1. 起步只需"一个循环 + 少数工具"：首提交 5 个文件即跑通，抽象（toolset、message graph）都是后补的，不预建框架。
