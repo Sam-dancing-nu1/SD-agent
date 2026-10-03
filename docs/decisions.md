@@ -65,9 +65,32 @@
 
 ## 三、门禁（动工/发布期产物，非拍板项）
 
-### D5② 轻量通用库准入清单 【门禁·动工时填】
+### D5② 轻量通用库准入清单 【门禁·动工时填 → 2026-10-03 已登记】
 - 性质：铁律 3 的落地产物——每个引入的轻量通用库（SQLite 驱动、sqlite-vec、ONNX Runtime 绑定、异步运行时、序列化、日志/转储、更新器、分词等）动工时逐库过审登记：库名 / 用途 / 许可 / 体积 / 引入理由 / 作者批准。
 - 覆盖范围：UI 调研语 5 与 记忆调研记 3/记 4 的通用库部分（三处重叠已合并归此门禁，不重复计项）。
+- **登记口径**：直接声明依赖逐条登记；传递依赖随宿主库登记（不逐条展开，以 Cargo.lock 为准可复查）。许可均取自各 crate 自身清单文件的声明字段（实锤），未核验的显式标"待核验"。
+
+| 库 | 版本 | 用途 | 许可（实锤来源） | 引入理由 | 状态 |
+|---|---|---|---|---|---|
+| async-openai | 0.42.1（features=chat-completion） | OpenAI 兼容 chat_completions 现成客户端库 | MIT（crate 清单声明） | 手册三件；p0-brief"现成客户端不自写" | 已用（P0） |
+| tokio | 1.53.1（macros/rt-multi-thread/time/sync/process/io-util） | 异步运行时：模型 IO、子进程、超时 | MIT（crate 清单声明） | 手册三件；UI 调研语 5 待拍板项随 P0 动工确认 | 已用（P0） |
+| serde / serde_json | 1.0.x | 事件契约与工具目录序列化 | MIT OR Apache-2.0（crate 清单声明） | 手册三件 | 已用（P0） |
+| ratatui | 0.29.0 | TUI 壳渲染层 | MIT（crate 清单声明实锤） | D2 拍板产物 | 已登记（双壳 demo） |
+| crossterm | 0.28.1 | TUI 终端控制层（D2 随附） | MIT（crate 清单声明实锤） | D2 拍板产物 | 已登记（双壳 demo） |
+| tauri + tauri-build | 2.12.1 / 2.7.1（含生态传递依赖） | 桌面壳 | Apache-2.0 OR MIT（crate 清单声明实锤） | D3 拍板产物 | 已登记（双壳 demo） |
+
+- **作者批准依据**：手册三件由 p0-brief 三节明示批准；UI 三件由 D2/D3 拍板 + 2026-10-03 用户深夜指令（TUI 与桌面端 demo 动工）即为引入授权，正式补签待用户醒后确认本表。
+- **动工实测备注**：async-openai 自 0.42 起为细粒度 feature 门控，P0 只开 `chat-completion`（最小面，不拉全功能树）。
+
+### 决策 3 机制形态实现磨合记录（2026-10-03，实现期实测落定）
+- 拍板原文："tools 执行函数用受限可见性 `pub(in crate::policy)` 只允许 policy 调用"。**实测不可行**：Rust 可见性限定只能指向**祖先模块**（编译错误 E0742），policy 不是 tools 的祖先，字面形态物理上编译不过。
+- 落定等价形态：各工具 execute 函数 = `pub(super)`（仅 tools 子树可见，policy 不可见）；policy→tools 唯一接口 = `tools::run_tool()`（pub(crate)）。"policy::dispatch 唯一模型驱动执行入口"的调用面保证不变（现状 grep 核验：run_tool 仅 policy::dispatch 一处调用）。**收口强度诚实口径**（2026-10-03 复查修订）：execute 层编译期闭合；run_tool 层为单接口 + 审查约定（pub(crate) 全 crate 可达），非编译期绝对闭合，闭合性靠调用纪律与 grep 校验维持。
+- 变更说明：project-structure.md 决策 3 的机制形态描述（pub(in crate::policy)）需同步为 run_tool 收口口径，待用户确认后更新该文档；依赖方向（cli → agent → policy → tools）不受影响。
+
+### 决策 1 工作区形态实现磨合记录（2026-10-03，实现期实测落定）
+- 拍板原文（决策 1）："单 crate 起步（lib + 薄壳 bin），不预先拆 workspace；拆分触发条件写死：出现第二个独立发布产物（P5 桌面壳）……才拆"。**实现期实况**：用户 2026-10-03 深夜指令要求 TUI 与桌面端双壳 demo 当晚交付——"第二个独立发布产物"提前到来，拆分触发条件被双壳 demo 提前触发，非拍板口径推翻。
+- 落定形态（按 project-structure.md 第五节拆分预案执行，预案原样适用）：非虚拟 workspace——root 包保留 src/ + `[workspace] members=["apps/tui","apps/desktop"]` + `resolver="3"`（陷阱显式规避）；apps/tui（sd-tui）与 apps/desktop（sd-desktop）为独立壳 crate，核心 lib 严禁依赖壳 crate。
+- 口径影响：project-structure.md 第二节目录树需补 apps/ 两壳落点（待用户确认后同步）；"二进制封顶 2"被双壳 demo 突破（现状 3 个二进制：sd-agent / sd-tui / sd-desktop），正式封顶口径待 P4/P5 复核。
 
 ### D5① 分发/签名/更新方案 【已定，随 D3】
 - 结论：分发走托管平台静态元数据 + 强制签名更新包（Tauri updater 签名不可关闭，UI 调研 [S8] 实锤）；更新服务器自建押后。

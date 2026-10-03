@@ -235,3 +235,35 @@
 - 待磨合（默认处置，不阻塞）：bash 工具名保留（默认保留，模型惯例优先）；P5 拆分形态（默认非虚拟 workspace，P5 时复核）。
 - 待核验：macOS 兼容性（无实机条件，P5 分发前 CI 矩阵补）；src/bin/ 多二进制编译开销量化。
 - 边界：本轮只落文档与地图，实现代码未动工。
+- 2026-10-03 P0 最小闭环 demo：sd-agent run 验收自证（轨迹与证据已落盘）。
+
+## 2026-10-03 P0 实现落地 + 双壳 demo（未提交，待用户醒后审）
+
+- 范围：核心 lib 27 个 .rs 按 project-structure.md 目录树全量落地（event 契约四件 + 四接口 + policy::dispatch 唯一模型驱动执行入口 + 四工具 + agent 循环熔断 + verify 证据链 + doctor 六项 + cli 手写解析）；apps/tui、apps/desktop 两壳最小闭环 demo。
+- 验收实测（真实命令输出，禁口头完工）：
+  - `sd-agent doctor` 六项全绿（api_credentials / workspace_writable / command_env / tool_dispatch 真通道 / endpoint 最小调用 / versions）；
+  - `sd-agent run --yes "<安全小任务>"` 跑通（6 轮 completed），三样证据齐：git diff（docs/iterations.md +1 行，验收任务产物）、.sd-agent/evidence/verify-*.txt（探针输出含退出码）、.sd-agent/traces/run-*.jsonl（78 事件，seq 0–77 连续，完整事件序列含审批往返与 verify_result）；
+  - `cargo build`/`cargo test -p sd-agent`：34 测试全过、零告警。
+- 机制磨合落定 1 条（详见 decisions.md"决策 3 机制形态实现磨合记录"）：受限可见性 pub(in crate::policy) 经编译器实测不可行（E0742），落为 tools::run_tool() 单接口收口，保证不变、机制更紧。
+- D5② 依赖登记已填（decisions.md 三节）；async-openai 0.42 细粒度 feature 门控，只开 chat-completion。
+- 环境口径：模型端点/模型名/凭据走 SD_AGENT_BASE_URL / SD_AGENT_MODEL / SD_AGENT_API_KEY 三环境变量（凭据不落盘不打印，与 p0-brief 三节一致）。
+- 待办：ratatui/crossterm/tauri 许可实锤补登记；project-structure.md 决策 3 机制描述同步（等用户确认）；全部改动未 git 提交（按用户指令留待晨检）。
+
+## 2026-10-03 独立挑刺复查 + 修复收口（第二轮）
+
+- 流程：双壳完成后按用户指令派独立子代理对抗性审查（核心+证据链+纪律），产出分级问题清单 4 HIGH + 9 MED + 11 LOW（含实测复现：字节截断 panic、junction 穿透、黑名单死条目 probe）。
+- 修复：HIGH 4 项全修、MED 9 项全修、LOW 修 7 记 5（详见 docs/p0-demo-runbook.md 三四节）；新增回归测试 3 个（多字节截断 / 设备路径真实样例 / canonical 逃逸判定），删除凑数测试 1 个，共 36 测试全过。
+- 终验实测：`cargo build --workspace` 零告警；`sd-agent doctor` 六项全绿并落盘 doctor-1790966738581.txt（铁律 5 兑现）；TUI `--selfcheck` 六帧 PASS（核心改动后复跑）；验收轨迹 78 行复核未损。
+- 措辞诚实化 2 处：run_tool 收口强度（单接口+审查约定，非编译期绝对闭合）；cmd OEM 编码容忍口径。
+- 磨合记录新增 1 条：决策 1 workspace 形态（双壳 demo 提前触发拆分条件，按第五节预案落地）。
+- 许可实锤回填 D5②：ratatui 0.29.0 MIT / crossterm 0.28.1 MIT / tauri 2.12.1+tauri-build 2.7.1 Apache-2.0 OR MIT。
+- 交付物：docs/p0-demo-runbook.md（晨检手册）落盘；仍全部未 git 提交，等用户晨检。
+
+## 2026-10-03 第二轮双壳挑刺 + 修复收口（终态）
+
+- 双壳对抗性审查（第三只眼）回流：1 HIGH + 6 MED + 16 LOW，含实测复现（get_trace_events 盘符相对路径 `C:evil.jsonl` 穿越、非 TTY 启动无限挂起 exit=124、panic 不还原终端、审批阻塞饿 tokio worker）。
+- 修复分工：两修复子代理分治（TUI 9 项 / 桌面 7 项），主代理修文档失实（runbook 证据表更正 + 半截轨迹口径补记）。
+- 独立复验实锤（不信自报）：`cargo build --workspace` 0 告警；`cargo test --workspace` 40 全过（核心 36 + 桌面路径校验新测 4）；`--selfcheck` OK；非 TTY 两变体 3 秒内 exit=2 显式拒（原挂死）；关键修复代码 grep 在位（IsTerminal/TerminalGuard/is_safe_trace_name/allow_all）；git HEAD 未动、改动范围零越界。
+- 等价修法 2 处（子代理自报并经核）：轨迹命名副本收敛为壳层单点（核心 TraceRecorder::jsonl 无法承载 TeeSink 双写，直用会丢 UI 事件流——留 P1 归一）；桌面 AlwaysAllow 用裸 AtomicBool（置位点在 approve 内部，无共享需求）。
+- 记录在案转 runbook 第四节：退出杀 run 半截轨迹、CJK 列宽（待 unicode-width 登记）、事件流无上限、icon 占位。
+- 终态：P0 核心 + 双壳 demo + 两轮独立挑刺修复闭环全部收口，全量产物未 git 提交，交接见 runbook。
