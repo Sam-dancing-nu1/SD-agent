@@ -3,8 +3,20 @@ name = "sd-agent"
 version = "0.1.0"
 edition = "2024"
 
+# 一核两壳布局（docs/project-structure.md 第五节拆分预案）：
+# root 包 = 核心 lib + CLI 薄壳 bin；apps/tui = 终端壳；apps/desktop = 桌面壳（独立 crate）。
+# resolver 必须显式设置（workspace 级陷阱，见 project-structure.md [S2]）。
+[workspace]
+members = ["apps/tui", "apps/desktop"]
+resolver = "3"
+
 [dependencies]
-async-openai = "0.42.1"
+# D5② 手册三件（docs/decisions.md D5② 登记表；UI 壳依赖登记在各自 crate）
+# byot：async-openai 泛型入口（自带 wire 类型，捕获 MiMo reasoning_content；
+# 标准类型无该字段会丢弃）。reqwest：依赖树内已有（async-openai 的依赖），
+# 流式 SSE 自解析用（Response::chunk 逐块取字节，不新增任何 crate）。
+async-openai = { version = "0.42.1", features = ["chat-completion", "byot"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "time", "sync", "process", "io-util"] }

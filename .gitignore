@@ -29,3 +29,6 @@ target/
 
 # sd-agent 运行时产物（轨迹含交互内容，不入库）
 .sd-agent/
+
+# Tauri 构建生成物（cargo build 时自动重新生成）
+apps/desktop/gen/
