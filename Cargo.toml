@@ -1,14 +1,18 @@
 [package]
 name = "sd-agent"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 
 # 一核两壳布局（docs/project-structure.md 第五节拆分预案）：
-# root 包 = 核心 lib + CLI 薄壳 bin；apps/tui = 终端壳；apps/desktop = 桌面壳（独立 crate）。
+# root 包 = 核心 lib + CLI 薄壳 bin；apps/tui = 终端壳（独立 crate）。桌面壳代码已清空，桌面形态后置。
 # resolver 必须显式设置（workspace 级陷阱，见 project-structure.md [S2]）。
 [workspace]
-members = ["apps/tui", "apps/desktop"]
+members = ["apps/tui"]
 resolver = "3"
+
+# 版本号唯一出处（docs/roadmap.md 版本号规划）：0.x 迭代期。
+[workspace.package]
+version = "0.1.0-alpha.1"
 
 [dependencies]
 # D5② 手册三件（docs/decisions.md D5② 登记表；UI 壳依赖登记在各自 crate）
