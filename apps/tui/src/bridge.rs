@@ -1,16 +1,11 @@
 //! 桥接层：核心 sd-agent ↔ UI 主线程的通道与接口适配（壳层唯一跨界点）。
 //!
-//! 1. TeeSink / ChannelSink：事件双写——同时落盘 JsonlSink 与转发 UI 通道，
-//!    两者都实现核心 EventSink，TeeSink 负责组合扇出（落盘优先，磁盘错误先暴露）；
-//! 2. StreamRelay：核心 StreamObserver 的 TUI 实现——流式增量（思考 / 正文 /
-//!    工具参数）逐条转发为 UiMsg，按 run_id 归属，多个 run 并发互不串；
-//! 3. TuiApproval：核心 ApprovalPort 的 TUI 实现——approve() 是同步 fn，
-//!    在 run 专属线程上以 std::sync::mpsc 阻塞等待 UI 主线程弹窗裁决
-//!    （run 一线程一 current_thread runtime，阻塞不影响 UI 事件循环与其他
-//!    run；UI 主线程渲染弹窗并 send 回裁决）；
-//! 4. UiMsg：后台（run / doctor）→ UI 主线程的唯一消息枚举。
+//! 1. TeeSink / ChannelSink：事件双写（落盘 JsonlSink + 转发 UI 通道）；
+//! 2. StreamRelay：核心 StreamObserver 实现，流式增量逐条转发 UI（不缓冲）；
+//! 3. TuiApproval：核心 ApprovalPort 实现，run 线程阻塞等 UI 弹窗裁决；
+//! 4. UiMsg：后台（run / doctor / 轨迹回读）→ UI 主线程的唯一消息枚举。
 //!
-//! 本文件不含任何业务逻辑，只做通道与接口适配。
+//! 本文件不含业务逻辑，只做通道与接口适配。
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -19,13 +14,17 @@ use std::sync::mpsc::Sender as StdSender;
 use sd_agent::doctor::DoctorReport;
 use sd_agent::event::{Event, EventSink, SinkError};
 use sd_agent::model::StreamObserver;
-use sd_agent::policy::{ApprovalDecision, ApprovalPort, ApprovalRequest};
+use sd_agent::policy::{ApprovalDecision, ApprovalPort, ApprovalRequest, RunApprovalState};
 
 /// 后台 → UI 主线程的消息。
+///
+/// run_id / round / id / title 等归属字段为协议字段：部分仅被多 run 归属与
+/// 事实源回读路径消费，允许暂不读取（多 run 并发与 hub 回读是既定扩展位）。
+#[allow(dead_code)]
 pub enum UiMsg {
-    /// 轨迹事件（ChannelSink 转发；run_id 归属到具体 run）。
+    /// 轨迹事件（ChannelSink 转发，run_id 归属）。
     Event { run_id: u64, event: Event },
-    /// 流式增量：思考文本（StreamRelay 转发）。
+    /// 流式增量：思考文本。
     ReasoningDelta {
         run_id: u64,
         round: u32,
@@ -37,46 +36,36 @@ pub enum UiMsg {
         round: u32,
         delta: String,
     },
-    /// 流式增量：工具调用参数（原地更新工具预览）。
+    /// 流式增量：工具调用参数（原地更新预览）。
     ToolCallDelta {
         run_id: u64,
         round: u32,
         name: String,
         args_so_far: String,
     },
-    /// 一轮模型输出流结束（思考/正文/工具参数全部到齐）。
+    /// 一轮模型输出流结束。
     TurnDone { run_id: u64, round: u32 },
-    /// 模型一轮完整回复（事件契约只记字数，正文经 ModelClient 装饰器上报；
-    /// 流式路径已逐字流入时仅作权威回填/兜底）。
-    ModelTurn {
-        run_id: u64,
-        round: u32,
-        text: String,
-        reasoning: String,
-    },
-    /// 一次 run 正常收尾（模型正文已由 ModelTurn 逐轮流入对话区，
-    /// 这里只收状态与轮数，不再携带正文副本）。
+    /// run 正常收尾（正文已逐轮流式流入，只收状态与轮数）。
     RunDone {
         run_id: u64,
         status: String,
         rounds: u32,
     },
-    /// run 以 Err 收尾（模型/轨迹故障）。
+    /// run 以错误收尾。
     RunFailed { run_id: u64, error: String },
-    /// doctor 六项体检结果。
+    /// doctor 体检结果。
     Doctor(DoctorReport),
-    /// 审批弹窗请求（reply 通道回传裁决）。
+    /// 审批弹窗请求（reply 回传裁决）。
     Approval {
         run_id: u64,
         request: ApprovalRequest,
         reply: StdSender<ApprovalDecision>,
     },
+    /// 会话存档追加（worker 收尾时由 run 侧发起，hub 回读时也用）。
+    SessionSaved { id: String, title: String },
 }
 
-/// 流式增量转发器：核心 StreamObserver 的 TUI 实现。
-///
-/// 每条增量原样转发为 UiMsg（run_id 归属），不做任何缓冲与合并——
-/// UI 线程负责增量追加渲染；UI 已退出则丢弃（观察面尽力而为）。
+/// 流式增量转发器：核心 StreamObserver 的壳层实现（零缓冲直转）。
 pub struct StreamRelay {
     run_id: u64,
     tx: StdSender<UiMsg>,
@@ -122,7 +111,7 @@ impl StreamObserver for StreamRelay {
     }
 }
 
-/// 事件转发到 UI 通道的 sink（观察面，尽力而为：UI 已退出则丢弃，不判故障）。
+/// 事件通道转发器：核心 EventSink → UiMsg::Event。
 pub struct ChannelSink {
     run_id: u64,
     tx: StdSender<UiMsg>,
@@ -136,6 +125,7 @@ impl ChannelSink {
 
 impl EventSink for ChannelSink {
     fn emit(&self, event: Event) -> Result<(), SinkError> {
+        // UI 已退出则丢弃（观察面尽力而为，不反压 run）。
         let _ = self.tx.send(UiMsg::Event {
             run_id: self.run_id,
             event,
@@ -144,7 +134,7 @@ impl EventSink for ChannelSink {
     }
 }
 
-/// 组合 sink：按序提交到多个 sink（TUI 里固定为 落盘 + 转发 两路）。
+/// 事件双写扇出：落盘优先（磁盘错误先暴露），再转发 UI。
 pub struct TeeSink {
     sinks: Vec<Arc<dyn EventSink>>,
 }
@@ -157,18 +147,24 @@ impl TeeSink {
 
 impl EventSink for TeeSink {
     fn emit(&self, event: Event) -> Result<(), SinkError> {
-        for sink in &self.sinks {
-            sink.emit(event.clone())?;
+        for s in &self.sinks {
+            s.emit(event.clone())?;
         }
         Ok(())
     }
 }
 
-/// TUI 审批口：阻塞等 UI 弹窗裁决。用户按 a 全放行后，后续调用直接放行。
+/// 审批口：核心 ApprovalPort 的壳层实现。
+///
+/// approve() 是同步 fn，在 run 专属线程上以 std::sync::mpsc 阻塞等待 UI
+/// 主线程弹窗裁决（run 一线程一 current_thread runtime，阻塞只卡自己）。
+/// `allow_all` 是会话级"本次会话全放行"开关（裁决 AlwaysAllow 时置位）；
+/// `state` 是 run 级放行位与连续拒绝熔断账本（核心 dispatch 消费）。
 pub struct TuiApproval {
     run_id: u64,
     tx: StdSender<UiMsg>,
     allow_all: Arc<AtomicBool>,
+    state: RunApprovalState,
 }
 
 impl TuiApproval {
@@ -177,11 +173,21 @@ impl TuiApproval {
             run_id,
             tx,
             allow_all,
+            state: RunApprovalState::new(),
         }
     }
 }
 
 impl ApprovalPort for TuiApproval {
+    fn source(&self) -> &'static str {
+        "tui"
+    }
+
+    fn run_state(&self) -> Option<&RunApprovalState> {
+        // 每 run 一个账本（拒绝熔断与 run 级 AlwaysAllow 由核心 dispatch 消费）。
+        Some(&self.state)
+    }
+
     fn approve(&self, request: ApprovalRequest) -> ApprovalDecision {
         if self.allow_all.load(Ordering::SeqCst) {
             return ApprovalDecision::AlwaysAllow;
@@ -196,14 +202,18 @@ impl ApprovalPort for TuiApproval {
             })
             .is_err()
         {
-            // UI 线程已退出：保守拒绝。
+            // UI 已退出：默认拒绝（安全侧），run 走拒绝分支收尾。
             return ApprovalDecision::Denied;
         }
-        // UI 线程渲染弹窗并回传；UI 消失时 recv 失败同样保守拒绝。
-        reply_rx.recv().unwrap_or(ApprovalDecision::Denied)
-    }
-
-    fn source(&self) -> &'static str {
-        "tui"
+        match reply_rx.recv() {
+            Ok(d) => {
+                if d == ApprovalDecision::AlwaysAllow {
+                    self.allow_all.store(true, Ordering::SeqCst);
+                }
+                d
+            }
+            // UI 崩溃/断开：同样按拒绝收尾，禁悬死。
+            Err(_) => ApprovalDecision::Denied,
+        }
     }
 }
