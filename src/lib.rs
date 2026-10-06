@@ -14,6 +14,7 @@ pub mod config;
 pub mod context;
 pub mod doctor;
 pub mod event;
+pub mod ext;
 pub mod model;
 pub mod policy;
 pub mod session;
