@@ -158,8 +158,28 @@ pub fn run() -> i32 {
         }
     }
 
+    // 帧 7：配置表单弹窗（读 FormState，五字段 + 按钮位）。
+    {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio");
+        let root = std::env::temp_dir().join("sd-tui-selfcheck-form");
+        let mut app = App::new_hub(root, "0.1.0-alpha.1", rt);
+        if let Mode::Hub(h) = &mut app.mode {
+            h.form = Some(crate::app::form::FormState::add());
+        }
+        match render_frame(&mut app, 120, 40) {
+            Ok(buf) => {
+                expect(&mut failures, "帧7 表单字段", &buf, "配置名");
+                expect(&mut failures, "帧7 表单按钮", &buf, "保存");
+            }
+            Err(e) => failures.push(format!("帧7 渲染失败: {e}")),
+        }
+    }
+
     if failures.is_empty() {
-        println!("selfcheck: OK（6 帧全过）");
+        println!("selfcheck: OK（7 帧全过）");
         0
     } else {
         println!("selfcheck: FAIL（{} 项）", failures.len());
@@ -175,7 +195,10 @@ fn render_frame(app: &mut App, w: u16, h: u16) -> Result<String, String> {
     let backend = TestBackend::new(w, h);
     let mut terminal = Terminal::new(backend).map_err(|e| e.to_string())?;
     terminal
-        .draw(|f| crate::ui::draw(app, f))
+        .draw(|f| {
+            // ui::draw 现返回 HitRects（交互区登记）；自检只渲染，丢弃返回值。
+            crate::ui::draw(app, f);
+        })
         .map_err(|e| e.to_string())?;
     let buf = terminal.backend().buffer();
     let mut out = String::new();

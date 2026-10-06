@@ -3,8 +3,8 @@
 //! worker 是执行面：一条任务一个 run（独立线程），对话流只进不改（流式
 //! 追加除外）；会话存档与轨迹是事实源，本状态只是它们的观察面。
 
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use sd_agent::doctor::DoctorReport;
 use sd_agent::policy::{ApprovalDecision, ApprovalRequest};
@@ -68,6 +68,30 @@ pub struct PendingApproval {
     pub reply: std::sync::mpsc::Sender<ApprovalDecision>,
 }
 
+/// 生命周期钩子名（与核心 LifecycleHook 枚举同名）：run/round/turn/tool/verify
+/// 节点通知，属内部留痕（轨迹文件已有完整事件），不该进对话流。
+pub fn is_lifecycle_hook(hook: &str) -> bool {
+    matches!(
+        hook,
+        "run_start"
+            | "run_end"
+            | "round_start"
+            | "round_end"
+            | "tool_before"
+            | "tool_after"
+            | "verify_before"
+            | "verify_after"
+    ) || hook.contains("turn")
+}
+
+/// 对话流渲染隐藏行：`[系统] {hook} · {note}` 形态的生命周期系统行
+/// （渲染层兜底过滤；进料侧 on_event 已拦一层）。
+pub fn is_hidden_system_line(text: &str) -> bool {
+    text.strip_prefix("[系统] ")
+        .and_then(|rest| rest.split([' ', '·']).next())
+        .is_some_and(is_lifecycle_hook)
+}
+
 /// worker 状态。
 pub struct WorkerState {
     pub feed: Vec<FeedItem>,
@@ -123,6 +147,32 @@ impl WorkerState {
     pub fn push(&mut self, item: FeedItem) {
         self.feed.push(item);
         self.scroll = 0; // 新条目自动贴底（尾部窗口语义）
+    }
+
+    /// 载入会话历史进 feed（`--worker --session <id>` 冷启动，继续追问）：
+    /// 只回放 user/assistant 正文与干预条目；记账起点=当前 feed 长度
+    ///（存档只追加新增，防全量替换吃掉旧消息）。会话不存在则静默空跑。
+    pub fn replay_session(&mut self, root: &std::path::Path) {
+        let Some(id) = self.session_id.clone() else {
+            return;
+        };
+        let Ok(Some(s)) = sd_agent::session::SessionStore::new(root).load(&id) else {
+            return;
+        };
+        self.push(FeedItem::Note(format!("已载入会话：{}", s.title)));
+        for m in s.messages {
+            match m.role.as_str() {
+                "user" => self.push(FeedItem::User(m.text)),
+                "assistant" => self.push(FeedItem::Assistant {
+                    text: m.text,
+                    reasoning: m.reasoning_content.unwrap_or_default(),
+                    streaming: false,
+                }),
+                _ => self.push(FeedItem::Intervention(m.text)),
+            }
+        }
+        // 回放的历史已是库内消息：存档只追加此后新增。
+        self.saved_count = self.feed.len();
     }
 
     /// 是否该丢弃某 run 的增量（已取消）。
@@ -331,8 +381,12 @@ impl WorkerState {
                 true
             }
             EventPayload::Hook(h) => {
-                // 干预透明：系统钩子/注入类事件灰字直接显示在消息流里
+                // 生命周期内部事件（run/round/turn/tool/verify 节点）只留痕
+                // 轨迹文件，不进对话流；其余干预透明：灰字直接显示在消息流里
                 // （工具卡按 id 更新，插队条目不破坏状态机）。
+                if is_lifecycle_hook(&h.hook) {
+                    return false;
+                }
                 self.push(FeedItem::Intervention(format!(
                     "[系统] {} · {}",
                     h.hook, h.note

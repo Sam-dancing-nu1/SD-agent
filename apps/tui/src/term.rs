@@ -1,16 +1,36 @@
-//! 双终端：hub 提交任务后以系统默认终端弹新终端跑 worker。
+//! 双终端：hub 提交任务/打开会话后以系统默认终端弹新终端跑 worker。
 //!
 //! Windows 假设 Windows Terminal（wt）可用，fallback conhost/cmd start；
-//! Linux 按桌面环境查表。全部失败时由调用方降级内嵌执行（不丢任务）。
+//! Linux 按桌面环境查表。全部失败时由调用方状态栏报错提示（任务文件/
+//! 会话库保留，可重试）——进程模型铁律：hub 绝不原地变身 worker。
 
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-/// 弹新终端跑 worker（`<exe> --worker --inbox <任务文件>`），不等待返回。
+/// 弹新终端跑 worker 新任务（`<exe> --worker --inbox <任务文件>`），不等待返回。
 pub fn spawn_worker(exe: &Path, inbox: &Path) -> std::io::Result<()> {
+    let args: Vec<String> = vec![
+        "--worker".into(),
+        "--inbox".into(),
+        inbox.to_string_lossy().to_string(),
+    ];
+    spawn_in_terminal(exe, &args)
+}
+
+/// 弹新终端打开历史会话（`<exe> --worker --session <id>`），不等待返回。
+/// 一个 worker 窗口单 WORK；hub 原地不动只刷新历史。
+pub fn spawn_worker_session(exe: &Path, session_id: &str) -> std::io::Result<()> {
+    let args: Vec<String> = vec![
+        "--worker".into(),
+        "--session".into(),
+        session_id.to_string(),
+    ];
+    spawn_in_terminal(exe, &args)
+}
+
+/// 系统默认终端弹窗执行 `<exe> <args>`（wt → conhost；Linux 桌面环境查表）。
+fn spawn_in_terminal(exe: &Path, args: &[String]) -> std::io::Result<()> {
     let exe_str = exe.to_string_lossy().to_string();
-    let inbox_str = inbox.to_string_lossy().to_string();
-    let args: Vec<String> = vec!["--worker".into(), "--inbox".into(), inbox_str.clone()];
 
     #[cfg(windows)]
     {
@@ -19,7 +39,7 @@ pub fn spawn_worker(exe: &Path, inbox: &Path) -> std::io::Result<()> {
             let mut cmd = Command::new("wt");
             cmd.args(["-w", "new-tab", "--title", "sd-agent · 会话"])
                 .arg(&exe_str)
-                .args(&args)
+                .args(args)
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
@@ -30,7 +50,7 @@ pub fn spawn_worker(exe: &Path, inbox: &Path) -> std::io::Result<()> {
         // 2) conhost/cmd start（窗口标题可读）。
         let mut cmd = Command::new("cmd");
         cmd.args(["/c", "start", "sd-agent · 会话", &exe_str])
-            .args(&args)
+            .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -47,7 +67,7 @@ pub fn spawn_worker(exe: &Path, inbox: &Path) -> std::io::Result<()> {
         ] {
             if has_command(term) {
                 let mut cmd = Command::new(term);
-                cmd.args(&pre).arg(&exe_str).args(&args);
+                cmd.args(&pre).arg(&exe_str).args(args);
                 if cmd.spawn().is_ok() {
                     return Ok(());
                 }

@@ -1,23 +1,24 @@
 //! 对话流渲染：feed 条目 → 可滚动文本流（含流式光标、灰字干预、工具卡）。
 //!
-//! 渲染只读 worker 状态；折行交给渲染组件的自动换行，滚动按行偏移。
+//! 渲染只读 worker 状态；折行在本层按显示宽度预先完成（宽度口径见
+//! char_cols），保证任意终端宽度/字体下文本不越界；滚动按行偏移取尾部窗口。
 
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 
-use crate::app::worker::{FeedItem, ToolStatus};
+use crate::app::worker::{is_hidden_system_line, FeedItem, ToolStatus};
 use crate::ui::theme;
 
 /// feed → 尾部窗口 Text（scroll_bottom=距底部偏移，0=贴底自动跟随）。
 ///
-/// 滚动语义与 WorkerState::scroll 一致：按逻辑行取尾部窗口，窗口外不渲染；
-/// 折行由渲染组件负责（窗口按逻辑行近似，wrap 后显示行可能略少）。
+/// 行集已按 width 显示列折行（显示行）；尾部窗口按行取，窗口外不渲染。
 pub fn render_feed_window(
     feed: &[FeedItem],
     scroll_bottom: u16,
     max_lines: usize,
+    width: usize,
 ) -> Text<'static> {
-    let all = collect_lines(feed);
+    let all = collect_lines(feed, width);
     let max_lines = max_lines.max(1);
     let total = all.len();
     let start = total.saturating_sub(max_lines + scroll_bottom as usize);
@@ -25,8 +26,11 @@ pub fn render_feed_window(
     Text::from(all[start..end].to_vec())
 }
 
-/// feed → 全量逻辑行。
-fn collect_lines(feed: &[FeedItem]) -> Vec<Line<'static>> {
+/// feed → 全量折行后显示行。
+///
+/// 生命周期系统行（`[系统] run_start` 等）在此过滤：内部事件只留痕轨迹
+/// 文件，不给用户看（进料侧 worker::on_event 已拦一层，此处兜底）。
+fn collect_lines(feed: &[FeedItem], width: usize) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
     for item in feed {
         match item {
@@ -102,6 +106,9 @@ fn collect_lines(feed: &[FeedItem]) -> Vec<Line<'static>> {
                 }
             }
             FeedItem::Intervention(t) => {
+                if is_hidden_system_line(t) {
+                    continue;
+                }
                 push_wrapped(&mut lines, "", Style::default(), t, theme::intervention());
             }
             FeedItem::Doctor(report) => {
@@ -138,9 +145,25 @@ fn collect_lines(feed: &[FeedItem]) -> Vec<Line<'static>> {
         }
     }
     lines
+        .into_iter()
+        .flat_map(|l| wrap_line(l, width))
+        .collect()
 }
 
-/// 前缀 + 正文的段落推送（正文整体同一样式；折行交渲染组件）。
+/// 滚动条参数（与 render_feed_window 同源口径）：(总行数, 窗口首行)。
+pub fn feed_window_metrics(
+    feed: &[FeedItem],
+    scroll_bottom: u16,
+    max_lines: usize,
+    width: usize,
+) -> (usize, usize) {
+    let total = collect_lines(feed, width).len();
+    let max_lines = max_lines.max(1);
+    let start = total.saturating_sub(max_lines + scroll_bottom as usize);
+    (total, start)
+}
+
+/// 前缀 + 正文的段落推送（正文整体同一样式；折行由 wrap_line 统一处理）。
 fn push_wrapped(
     lines: &mut Vec<Line<'static>>,
     prefix: &str,
@@ -154,4 +177,87 @@ fn push_wrapped(
     for para in body.split('\n') {
         lines.push(Line::from(Span::styled(para.to_string(), body_style)));
     }
+}
+
+/// 折行宽度口径：CJK 等宽字符 2 列（与 ui::is_wide / widgets::disp_width
+/// 同源）；ASCII 1 列；其余非 ASCII（… · › ' " — 等歧义宽度字符，部分
+/// 终端字体按 2 列渲染）保守按 2 列计——任何字体下折行结果都不越界。
+fn char_cols(c: char) -> usize {
+    if super::is_wide(c) {
+        2
+    } else if c.is_ascii() {
+        1
+    } else {
+        2
+    }
+}
+
+/// 行显示宽度（折行同口径；测试断言"不越界"用）。
+#[cfg(test)]
+pub fn line_cols(line: &Line<'_>) -> usize {
+    line.spans
+        .iter()
+        .flat_map(|s| s.content.chars())
+        .map(char_cols)
+        .sum()
+}
+
+/// 一行按 width 显示列贪心折行：空白处优先断行，无空白超长段硬断；
+/// 样式随字符保留（相邻同样式合并回 Span）。
+fn wrap_line(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
+    let width = width.max(1);
+    let mut chars: Vec<(char, Style)> = Vec::new();
+    for span in line.spans {
+        for c in span.content.chars() {
+            chars.push((c, span.style));
+        }
+    }
+    if chars.is_empty() {
+        return vec![Line::from("")];
+    }
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let mut used = 0;
+        let mut j = i;
+        while j < chars.len() {
+            let cw = char_cols(chars[j].0);
+            if used + cw > width {
+                break;
+            }
+            used += cw;
+            j += 1;
+        }
+        if j == i {
+            j = i + 1; // 单字符宽于行宽：硬放一行，防死循环
+        }
+        if j >= chars.len() {
+            out.push(styled_line(&chars[i..]));
+            break;
+        }
+        // 空白断点优先（行尾空白归前行）；无空白则硬断。
+        match (i..j).rev().find(|&k| chars[k].0.is_whitespace()) {
+            Some(bp) => {
+                out.push(styled_line(&chars[i..=bp]));
+                i = bp + 1;
+            }
+            None => {
+                out.push(styled_line(&chars[i..j]));
+                i = j;
+            }
+        }
+    }
+    out
+}
+
+/// (字符, 样式) 序列 → Line（相邻同样式合并成 Span）。
+fn styled_line(chars: &[(char, Style)]) -> Line<'static> {
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    for &(c, st) in chars {
+        match spans.last_mut() {
+            Some(s) if s.style == st => s.content.to_mut().push(c),
+            _ => spans.push(Span::styled(c.to_string(), st)),
+        }
+    }
+    Line::from(spans)
 }

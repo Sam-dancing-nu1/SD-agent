@@ -25,7 +25,7 @@ use std::time::Duration;
 
 use crossterm::cursor::Show;
 use crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event as TermEvent, KeyEventKind, MouseEventKind,
+    self, DisableMouseCapture, EnableMouseCapture, Event as TermEvent, KeyEventKind,
 };
 use crossterm::execute;
 use crossterm::terminal::{
@@ -35,7 +35,6 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
 use app::{App, Focus, Mode};
-use keymap::Action;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -104,7 +103,8 @@ fn print_help() {
          键位：\n\
          {}\
          \n\
-         双终端：hub 回车 → 弹系统默认终端跑会话（WT/conhost，失败内嵌降级）。\n\
+         双终端：hub 回车/开会话 → 弹系统默认终端跑会话（WT/conhost；失败=状态栏提示，\n\
+         任务文件/会话库保留可重试，hub 不内嵌降级）。\n\
          版本号口径：0.x 迭代期（规划见 docs/roadmap.md 版本号规划节）。",
         keymap::help_text()
     );
@@ -170,17 +170,10 @@ fn event_loop(app: &mut App, terminal: &mut Terminal<CrosstermBackend<Stdout>>) 
                 TermEvent::Key(key) if key.kind != KeyEventKind::Release => {
                     dirty |= handle_key(app, key);
                 }
-                TermEvent::Mouse(mouse) => match mouse.kind {
-                    MouseEventKind::ScrollUp => {
-                        app.dispatch(Action::ScrollUp);
-                        dirty = true;
-                    }
-                    MouseEventKind::ScrollDown => {
-                        app.dispatch(Action::ScrollDown);
-                        dirty = true;
-                    }
-                    _ => {}
-                },
+                TermEvent::Mouse(mouse) => {
+                    // 鼠标全量语义在 app::mouse（点击/双击/滚轮/拖动/拖选）。
+                    dirty |= app.handle_mouse(mouse);
+                }
                 TermEvent::Resize(..) => dirty = true,
                 _ => {}
             }
@@ -189,9 +182,12 @@ fn event_loop(app: &mut App, terminal: &mut Terminal<CrosstermBackend<Stdout>>) 
         // 2) 后台消息排空（帧合并：一批消息一帧）。
         dirty |= app.pump_msgs();
 
-        // 3) 重绘。
+        // 3) 重绘（每帧把可交互区登记进 App，供鼠标命中消费）。
         if dirty {
-            terminal.draw(|f| ui::draw(app, f))?;
+            terminal.draw(|f| {
+                let hits = ui::draw(app, f);
+                app.set_hits(hits);
+            })?;
             dirty = false;
         }
 
@@ -221,6 +217,24 @@ fn handle_key(app: &mut App, key: event::KeyEvent) -> bool {
         }
     }
 
+    // 配置表单（模态）：只认表单键位（Tab 换字段 · Ctrl+S 保存 · Esc 取消）。
+    if app.form_open() {
+        if let Some(action) = keymap::map_form(key) {
+            app.dispatch(action);
+            return true;
+        }
+        return false;
+    }
+
+    // 模型选择浮层（模态）：只认浮层键位（↑↓ 选择 · Enter 确认 · Esc 取消）。
+    if app.model_popup_open() {
+        if let Some(action) = keymap::map_model_popup(key) {
+            app.dispatch(action);
+            return true;
+        }
+        return false;
+    }
+
     // 帮助浮层：任意键关闭。
     if app.help_open {
         app.help_open = false;
@@ -235,14 +249,21 @@ fn handle_key(app: &mut App, key: event::KeyEvent) -> bool {
 
     let input_empty = app.input_text().is_empty();
 
-    // 斜杠列表弹出状态跟踪（输入 / 弹出，删光关闭）。
-    app.slash_open = app.input_text().starts_with('/') && app.input_text().len() < 24;
+    // 斜杠浮层开着：↑↓/PgUp/PgDn/Enter/Esc 归浮层（hub/worker 通用），
+    // 其余键交回输入编辑（过滤继续）。
+    if app.slash_open {
+        if let Some(action) = keymap::map_slash(key) {
+            app.dispatch(action);
+            return true;
+        }
+    }
 
-    // 模式键位（Enter→Send/Launch 经 submit_input 做斜杠路由）。
+    // 模式键位（Enter→Send/Launch 经 submit_input 做斜杠路由；
+    // hub Enter 按焦点分叉：输入框=新开任务 / 历史列表=打开会话）。
     let mode_action = if app.is_worker() {
         keymap::map_worker(key, input_empty)
     } else {
-        keymap::map_hub(key, input_empty)
+        keymap::map_hub(key, input_empty, app.focus == Focus::List)
     };
     if let Some(action) = mode_action {
         app.dispatch(action);

@@ -83,8 +83,36 @@ pub fn intervention() -> Style {
     Style::default().fg(DIM).add_modifier(Modifier::ITALIC)
 }
 
-/// 热力图四档字符（空 → 满），与 stat_heat 样式配套。
-pub const HEAT_CHARS: [char; 5] = [' ', '░', '▒', '▓', '█'];
+/// 热力图五档字符（空日 → 满），与 heat() 样式配套。
+/// 档 0（无消耗日）用暗灰 '░' 占位——不留空格（用户反馈空格看着像乱码）。
+pub const HEAT_CHARS: [char; 5] = ['░', '▒', '▓', '█', '█'];
+
+/// 滑条：已选段 / 未选段（分段块状滑条，形态取自 tui-slider 类组件）。
+pub fn slider_on() -> Style {
+    Style::default().fg(ACCENT)
+}
+
+pub fn slider_off() -> Style {
+    Style::default().fg(Color::Rgb(72, 78, 92))
+}
+
+/// 滚动条：滑块 / 轨道。
+pub fn scroll_thumb() -> Style {
+    Style::default().fg(Color::Rgb(104, 112, 128))
+}
+
+pub fn scroll_track() -> Style {
+    Style::default().fg(Color::Rgb(48, 54, 66))
+}
+
+/// 表单字段标签 / 输入值。
+pub fn field_label() -> Style {
+    Style::default().fg(MUTED)
+}
+
+pub fn field_value() -> Style {
+    Style::default().fg(TEXT)
+}
 
 /// 热力图格子样式：按档位 0..4 取色（档越高越亮，统一琥珀系）。
 pub fn heat(level: usize) -> Style {
