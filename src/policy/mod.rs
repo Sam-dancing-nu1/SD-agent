@@ -27,7 +27,9 @@ pub use approval::{
     RunApprovalState,
 };
 pub use dispatch::dispatch;
-pub use rules::{CombinedPattern, CommandRules, DANGEROUS_PATTERNS, matched_dangerous_pattern};
+pub use rules::{
+    CombinedPattern, CommandRules, DANGEROUS_PATTERNS, is_safe_readonly, matched_dangerous_pattern,
+};
 
 /// 一次模型工具调用（模型输出 → 强类型）。
 #[derive(Debug, Clone)]
@@ -251,6 +253,99 @@ mod tests {
         // 事件留痕：熔断文案进 ToolCallDenied reason。
         let trace = std::fs::read_to_string(dir.join(".sd-agent/traces/t.jsonl")).unwrap();
         assert!(trace.contains("连续被拒已达上限"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn bash_safe_readonly_bypasses_approval() {
+        // 只读安全命令免审：bash `date` 走 mock ApprovalPort（被询问即拒），
+        // 断言未被询问；事件口径=不发 ToolApprovalRequested，
+        // ToolCallStarted/ToolCallFinished 照发（审计不丢）。
+        // 注：执行结果与免审口径解耦——执行器随 env.shell_kind 走，Windows 下
+        // cmd 的 `date` 是交互提示（exit≠0），故执行成功腿用双 shell 均 exit 0
+        // 的 `echo` 断言。
+        let dir = std::env::temp_dir().join(format!("sd-policy-test5-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".sd-agent/traces")).unwrap();
+        let sink = Arc::new(JsonlSink::open(dir.join(".sd-agent/traces/t.jsonl")).unwrap());
+        let rec = TraceRecorder::new("t5", sink);
+        let env = EnvProfile::detect();
+        let ledger = ResourceLedger::new();
+        let tables = DisciplineTables::p0();
+        let port = CountingPort::new(ApprovalDecision::Denied);
+        let c = ctx(&env, &dir, &rec, &ledger, &tables, &port);
+        let res = dispatch(
+            &c,
+            &ToolCall {
+                id: "c-date".into(),
+                name: "bash".into(),
+                args_json: r#"{"command":"date"}"#.into(),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(!res.denied);
+        // 未被询问：approve 调用数为 0（若被询问会被 Denied 拒掉）。
+        assert_eq!(port.calls(), 0);
+        // 执行成功腿（双 shell 通用只读命令）：同样免审且真的跑通。
+        let res2 = dispatch(
+            &c,
+            &ToolCall {
+                id: "c-echo".into(),
+                name: "bash".into(),
+                args_json: r#"{"command":"echo safe-readonly-probe"}"#.into(),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(res2.ok, "{}", res2.text);
+        assert_eq!(port.calls(), 0);
+        let trace = std::fs::read_to_string(dir.join(".sd-agent/traces/t.jsonl")).unwrap();
+        assert!(!trace.contains("tool_approval_requested"));
+        assert!(trace.contains("tool_call_started"));
+        assert!(trace.contains("tool_call_finished"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn bash_composite_form_still_requires_approval() {
+        // 组合形态照旧审批：非危险组合 `date && ls` 不免审、必须过端口；
+        // 危险组合 `date && rm -rf /` 在危险规则表步（审批之前）即拒，
+        // 端口不被询问——顺序即口径。
+        let dir = std::env::temp_dir().join(format!("sd-policy-test6-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".sd-agent/traces")).unwrap();
+        let sink = Arc::new(JsonlSink::open(dir.join(".sd-agent/traces/t.jsonl")).unwrap());
+        let rec = TraceRecorder::new("t6", sink);
+        let env = EnvProfile::detect();
+        let ledger = ResourceLedger::new();
+        let tables = DisciplineTables::p0();
+        let port = CountingPort::new(ApprovalDecision::Denied);
+        let c = ctx(&env, &dir, &rec, &ledger, &tables, &port);
+        let res = dispatch(
+            &c,
+            &ToolCall {
+                id: "c-comp".into(),
+                name: "bash".into(),
+                args_json: r#"{"command":"date && ls"}"#.into(),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(res.denied);
+        assert_eq!(port.calls(), 1);
+        // 危险组合：规则表先拒，端口调用数不增。
+        let res2 = dispatch(
+            &c,
+            &ToolCall {
+                id: "c-comp2".into(),
+                name: "bash".into(),
+                args_json: r#"{"command":"date && rm -rf /"}"#.into(),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(res2.denied);
+        assert!(res2.text.contains("dangerous command pattern"));
+        assert_eq!(port.calls(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

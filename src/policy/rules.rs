@@ -5,6 +5,10 @@
 //! P0 雏形口径（project-structure.md 第六节 1）：子串模式匹配可被
 //! 参数化执行绕过，不宣称封闭；命中即拒，拒绝原因全量留痕。
 //!
+//! 只读安全命令白名单（免审口径）：确定性只读**单命令**查表免审，
+//! 由 `is_safe_readonly` 判定——组合形态（连接符/管道/重定向/注入形态）
+//! 一律不免审、照走审批；白名单宁少勿多，不确定就不免审。
+//!
 //! 平台口径（问题②修复）：Windows 只查 windows 表 + 高危共通子集，
 //! 普通 POSIX 条目（userdel / visudo 等）不在 Windows 拦——收窄合并检查
 //! 带来的误报面；POSIX 查 posix 表 + 高危共通子集。高危共通 = 磁盘/系统级
@@ -167,6 +171,73 @@ pub fn matched_dangerous_pattern(os: OsFamily, command: &str) -> Option<&'static
         })
 }
 
+/// 只读安全命令白名单（第一 token；保守清单，宁少勿多）。
+/// 口径：确定性只读单命令免审；`find` 不进（有 -delete/-exec 形态）；
+/// `git` 进表但双重门控（第二 token 还须命中 SAFE_GIT_SUB，见
+/// `is_safe_readonly`）。大小写敏感——bash 里命令区分大小写，`DATE`
+/// 这类形态不命中即不免审（安全优先，误报可接受）。
+pub const SAFE_READONLY: &[&str] = &[
+    "date",
+    "ls",
+    "cat",
+    "pwd",
+    "echo",
+    "head",
+    "tail",
+    "wc",
+    "which",
+    "uname",
+    "env",
+    "printenv",
+    "stat",
+    "file",
+    "tree",
+    "ps",
+    "df",
+    "du",
+    "md5sum",
+    "sha256sum",
+    "grep",
+    // 只读态 git 子命令经 SAFE_GIT_SUB 二次门控。
+    "git",
+];
+
+/// git 只读子命令白名单（第二 token）。push/clean/reset/commit 等写形态
+/// 不进——免审只给确定性只读。
+pub const SAFE_GIT_SUB: &[&str] = &["status", "log", "diff", "show", "branch", "remote"];
+
+/// 连接符 / 重定向 / 注入形态字符序列：整串出现任意一个即不免审。
+/// 不做引号内豁免——引号里带 `>` 也不免审（误报可接受，安全优先）。
+const UNSAFE_MARKERS: &[&str] = &["&&", "||", ";", "|", ">", "<", "`", "$(", "&", "\n", "\r"];
+
+/// bash 命令是否确定性只读、可免审直放（纯函数，零成本查表）。
+///
+/// 判定（安全优先，宁可多弹不放险）：
+/// a. 整串 trim 后按空白切 token，首 token 必须命中 `SAFE_READONLY`；
+/// b. 首 token 是 `git` 时，第二 token 还必须命中 `SAFE_GIT_SUB`；
+/// c. 整串出现任何 `UNSAFE_MARKERS`（连接符/重定向/注入形态）即不免审；
+/// d. 全过 → true。空串/纯空白无首 token → false。
+///
+/// 注意：组合形态一律不免审、照走审批；子串匹配不宣称封闭的既有口径不变
+///（本函数只做"确定性只读单命令"放行，不做危险命令拦截——危险规则表在
+/// dispatch 里另有独立步骤，顺序在其之前）。
+pub fn is_safe_readonly(command: &str) -> bool {
+    if UNSAFE_MARKERS.iter().any(|m| command.contains(m)) {
+        return false;
+    }
+    let mut tokens = command.split_whitespace();
+    let Some(first) = tokens.next() else {
+        return false;
+    };
+    if !SAFE_READONLY.contains(&first) {
+        return false;
+    }
+    if first == "git" {
+        return tokens.next().is_some_and(|sub| SAFE_GIT_SUB.contains(&sub));
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,5 +367,38 @@ mod tests {
             matched_dangerous_pattern(OsFamily::Windows, "dd if=/dev/zero of=/dev/sda").is_some()
         );
         assert!(matched_dangerous_pattern(OsFamily::Linux, "mkfs /dev/sda1").is_some());
+    }
+
+    #[test]
+    fn safe_readonly_allows_deterministic_readonly_single_commands() {
+        // 免审样例：确定性只读单命令（含参数与 git 只读子命令）。
+        assert!(is_safe_readonly("date"));
+        assert!(is_safe_readonly("ls -la"));
+        assert!(is_safe_readonly("git log --oneline"));
+        assert!(is_safe_readonly("  git status  "));
+    }
+
+    #[test]
+    fn safe_readonly_rejects_write_composite_and_degenerate_forms() {
+        // 不免审样例：写形态 / 组合形态 / 退化形态。
+        assert!(!is_safe_readonly("git push"));
+        assert!(!is_safe_readonly("date && rm -rf /"));
+        assert!(!is_safe_readonly("cat f > g"));
+        assert!(!is_safe_readonly("echo hi | sh"));
+        assert!(!is_safe_readonly("rm file"));
+        assert!(!is_safe_readonly(""));
+        assert!(!is_safe_readonly("   "));
+        assert!(!is_safe_readonly("git log; rm"));
+    }
+
+    #[test]
+    fn safe_readonly_fails_closed_on_edge_forms() {
+        // 安全优先边角：引号内连接符不豁免、find 有 -delete/-exec 形态不进
+        // 白名单、git 无子命令不免、大小写不匹配不免（bash 区分大小写）。
+        assert!(!is_safe_readonly("echo 'a > b'"));
+        assert!(!is_safe_readonly("find . -delete"));
+        assert!(!is_safe_readonly("git"));
+        assert!(!is_safe_readonly("DATE"));
+        assert!(!is_safe_readonly("cat a $(date)"));
     }
 }

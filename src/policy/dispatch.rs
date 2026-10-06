@@ -9,7 +9,7 @@ use crate::event::{
 };
 
 use super::{
-    ApprovalDecision, ApprovalRequest, PolicyContext, ToolCall, ToolResult,
+    ApprovalDecision, ApprovalRequest, PolicyContext, ToolCall, ToolResult, is_safe_readonly,
     matched_dangerous_pattern,
 };
 
@@ -73,10 +73,20 @@ pub async fn dispatch(ctx: &PolicyContext<'_>, call: &ToolCall) -> Result<ToolRe
         }
     }
 
-    // 4. 审批往返（read 免审；其余一律过 ApprovalPort——裁决由人/壳作出）。
+    // 4. 审批往返（read 免审；bash 确定性只读单命令免审——rules::is_safe_readonly
+    // 查表口径：组合形态/重定向/git 写子命令一律照走 ApprovalPort，裁决由人/壳
+    // 作出。免审路径不发 ToolApprovalRequested（无询问就无申请），但
+    // ToolCallStarted/ToolCallFinished 照发（审计不丢）。
     // AlwaysAllow 消费（问题③）：端口置过放行位后，本 run 内后续非只读工具
     // 免询问；事件仍照发（by 如实记 "always"，审计不丢）。
-    if call.name != "read" {
+    let readonly_exempt = call.name == "read"
+        || (call.name == "bash"
+            && is_safe_readonly(
+                args.get("command")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default(),
+            ));
+    if !readonly_exempt {
         let summary = approval_summary(&call.name, &args);
         ctx.recorder
             .record(EventPayload::ToolApprovalRequested(ToolApprovalRequested {
