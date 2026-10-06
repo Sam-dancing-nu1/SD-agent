@@ -219,10 +219,7 @@ mod tests {
         assert!(s.messages.is_empty());
 
         store
-            .append(
-                &s.id,
-                SessionMessage::new("user", "帮我看看这个目录", 1),
-            )
+            .append(&s.id, SessionMessage::new("user", "帮我看看这个目录", 1))
             .expect("append user");
         store
             .append(
